@@ -1,6 +1,7 @@
 #include "ErrorHandler.h"
 #include "AsyncTask.h"
 #include <stdio.h>
+#include <semaphore.h>
 
 // Lock
 void _acquire_pool_lock(pthread_mutex_t* lock) {
@@ -85,20 +86,20 @@ void* _worker_procedure(void* pool) {
 			if (VERBOSE) printf("worker report: Queue size is 0\n");
       LOCK_POOL(p);
       p->state = P_IDLE;
-      sem_getvalue(&(p->waiting_sem), sval);
-			if (VERBOSE) printf("worker report: pool state is IDLE, sem value: %d\n", *sval);
-      if (*sval == 0) sem_post(&(p->waiting_sem));
+      // sem_getvalue(&(p->waiting_sem), sval);
+			// if (VERBOSE) printf("worker report: pool state is IDLE, sem value: %d\n", *sval);
+      // if (*sval == 0) sem_post(&(p->waiting_sem));
       UNLOCK_POOL(p);
     }
-    sem_wait(&(p->jobs_sem));
+    // sem_wait(&(p->jobs_sem));
     // no need to acquire p lock as Queue has built-in lock
     job = Queue_poll(p->q);
 		if (VERBOSE) printf("worker report: job acquired.");
     LOCK_POOL(p);
     p->state = P_BUSY;
-    sem_getvalue(&(p->waiting_sem), sval);
-    if (*sval == 1) sem_wait(&(p->waiting_sem));
-		if (VERBOSE) printf("worker report: sem value: %d\n", *sval);
+    // sem_getvalue(&(p->waiting_sem), sval);
+    // if (*sval == 1) sem_wait(&(p->waiting_sem));
+		// if (VERBOSE) printf("worker report: sem value: %d\n", *sval);
     UNLOCK_POOL(p);
     _async_task_procedure(job);
 		if (VERBOSE) printf("worker report: job done.");
@@ -165,7 +166,12 @@ struct AsyncTask* pool_schedule(struct TaskPool* p, Task* task, void* arg) {
 
 void pool_wait(struct TaskPool* p) {
   if (p->state == P_BUSY) {
-    sem_wait(&(p->waiting_sem));
+		LOCK_POOL(p);
+		p->state = P_DONE;
+		UNLOCK_POOL(p);
+		for (int i = 0; i < p->num_workers; i++) {
+			pthread_join((p->workers)[i]->thread, NULL);
+		}
   }
   return ;
 }
