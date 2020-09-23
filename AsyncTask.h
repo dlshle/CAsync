@@ -28,6 +28,11 @@ struct AsyncTask {
 	void* pool;
 };
 
+// TEMP
+
+void Start_Task(struct AsyncTask* t);
+struct AsyncTask* New_Task(Task* task, void* arg);
+
 struct TaskNode {
 	struct AsyncTask* task;
 	struct TaskNode* next;

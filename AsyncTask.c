@@ -19,12 +19,13 @@ void _release_pool_lock(pthread_mutex_t* lock) {
 void* _async_task_procedure(void* task) {
   struct AsyncTask* t = (struct AsyncTask*)task;
   if (!t) return 0;
+	printf("running async procedure %p(%d)\n", t, t->id);
   if (t->task != 0) {
-    if (VERBOSE) printf("Async task %p running\n", t);
+    if (VERBOSE) printf("Async task %p(%d) running\n", t, t->id);
     t->state = RUNNING;
     t->result = (t->task)(t->arg);
   }
-  if (VERBOSE) printf("Async task %p running\n", t);
+  if (VERBOSE) printf("Async task %p(%d) finished\n", t, t->id);
   t->state = DONE;
 }
 
@@ -38,14 +39,27 @@ struct AsyncTask* _init_async_task(size_t id, Task* task, void* arg) {
   return t;
 }
 
+// TEMP
+struct AsyncTask* New_Task(Task* task, void* arg) {
+  return _init_async_task(1, task, arg);
+}
+
 void _start_async_task(struct AsyncTask* t) {
   if (!t) return ;
+	if (VERBOSE) printf("Starting async task %p(%d)\n", t, t->id);
   if (t->state != NOT_STARTED) {
+		printf("Async task %p(%d) has already started\n", t, t->id);
     report_error("ERROR trying to start a STARTED Async Task", LOGIC_ERR);
   }
   if (pthread_create(&(t->thread), NULL, &_async_task_procedure, t) != 0) {
+		printf("Async task %p(%d) can not be created\n", t, t->id);
     report_error("ERROR unable to create thread for Async Task", THREAD_ERR);
   }
+}
+
+// TEMP
+void Start_Task(struct AsyncTask* t) {
+  _start_async_task(t);
 }
 
 int _free_async_task(struct AsyncTask* task, int wait) {
@@ -61,38 +75,45 @@ int _free_async_task(struct AsyncTask* task, int wait) {
 #define LOCK_POOL(p) _acquire_pool_lock(&(p->lock))
 #define UNLOCK_POOL(p) _release_pool_lock(&(p->lock))
 
-void *_worker_procedure(void* pool) {
+void* _worker_procedure(void* pool) {
   struct TaskPool* p = (struct TaskPool*)pool;
   void* job;
   int* sval;
+	if (VERBOSE) printf("worker report: worker is running\n");
   do {
     if (Queue_size(p->q) == 0) {
+			if (VERBOSE) printf("worker report: Queue size is 0\n");
       LOCK_POOL(p);
       p->state = P_IDLE;
       sem_getvalue(&(p->waiting_sem), sval);
+			if (VERBOSE) printf("worker report: pool state is IDLE, sem value: %d\n", *sval);
       if (*sval == 0) sem_post(&(p->waiting_sem));
       UNLOCK_POOL(p);
     }
     sem_wait(&(p->jobs_sem));
     // no need to acquire p lock as Queue has built-in lock
     job = Queue_poll(p->q);
+		if (VERBOSE) printf("worker report: job acquired.");
     LOCK_POOL(p);
     p->state = P_BUSY;
     sem_getvalue(&(p->waiting_sem), sval);
     if (*sval == 1) sem_wait(&(p->waiting_sem));
+		if (VERBOSE) printf("worker report: sem value: %d\n", *sval);
     UNLOCK_POOL(p);
     _async_task_procedure(job);
+		if (VERBOSE) printf("worker report: job done.");
   } while (p->state != P_DONE);
 }
 
 void _start_pool(struct TaskPool* p) {
   if (!p || p->state != P_NOT_STARTED) return ;
-  LOCK_POOL(p);
+	if (VERBOSE) printf("starting pool...");
   for (int i = 0; i < p->num_workers; i++) {
-    _start_async_task(p->workers[i]);
+		if (VERBOSE) printf("initiating worker %d(%d)\n", i, (p->workers)[i]->id);
+    _start_async_task((p->workers)[i]);
+		if (VERBOSE) printf("worker %d(%d) initiated\n", i, (p->workers)[i]->id);
   }
   p->state = P_BUSY;
-  UNLOCK_POOL(p);
 }
 
 struct TaskPool* pool_init(unsigned int pool_size) {
@@ -103,7 +124,7 @@ struct TaskPool* pool_init(unsigned int pool_size) {
   p->num_workers = pool_size;
   p->workers = malloc(sizeof(struct AsyncTask*) * pool_size);
   for (int i = 0; i < pool_size; i++) {
-    (p->workers)[i] = _init_async_task(1, _worker_procedure, p);
+    (p->workers)[i] = _init_async_task(i, &_worker_procedure, (void*)p);
   }
   if (pthread_mutex_init(&(p->lock), NULL) != 0) {
 	  report_error("ERROR initialize TaskPool lock.\n", MUTEX_ERR);
@@ -116,6 +137,7 @@ struct TaskPool* pool_init(unsigned int pool_size) {
   }
   p->q = Queue_new();
   p->state = P_NOT_STARTED;
+	_start_pool(p);
   return p;
 }
 

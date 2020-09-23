@@ -14,5 +14,6 @@ int main(int argc, char** argv) {
 	struct AsyncTask* t2 = pool_schedule(p, test, "c");
 	struct AsyncTask* t3 = pool_schedule(p, test, "4");
 	struct AsyncTask* t4 = pool_schedule(p, test, "e");
+	pool_wait(p);
 	return 0;
 }

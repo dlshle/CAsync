@@ -1,6 +1,13 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include "ErrorHandler.h"
+//#include "ErrorHandler.h"
+#include <pthread.h>
+#include "AsyncTask.h"
+
+void* work(void* arg) {
+	printf("%s\n", (char*)arg);
+	return (void*)"haha";
+}
 
 /*
 void std_report(char* msg) {
@@ -21,6 +28,15 @@ void report_by_type(int type, char* msg) {
 */
 
 int main(int argc, char** argv) {
-	report_error("unknown operation", 0);
+	Task* t = &work;
+	//report_error("unknown operation", 0);
+	pthread_t th;
+	pthread_create(&th, NULL, work, "asd");
+	pthread_join(th, NULL);
+
+	struct AsyncTask* task = New_Task(t, "asd1");
+	Start_Task(task);
+	pthread_join(task->thread, NULL);
+	printf("result: %s\n", (char*)task->result);
 	return 0;
 }
