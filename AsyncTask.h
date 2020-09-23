@@ -7,7 +7,7 @@
 #include "./LinkedList/Queue.h"
 
 #define MAX_POOL_SIZE 1024
-#define VERBOSE 1
+#define VERBOSE 0
 
 enum AsyncTaskState {
 	NOT_STARTED = 0,
@@ -52,6 +52,11 @@ enum TaskPoolState {
 	P_DONE
 };
 
+enum TaskPoolStatus {
+  P_RUNNING = 0,
+  P_STOP
+};
+
 struct TaskPool {
 	size_t num_workers;
 	struct AsyncTask** workers;
@@ -60,6 +65,7 @@ struct TaskPool {
 	sem_t waiting_sem;
 	struct Queue* q;
 	volatile enum TaskPoolState state;
+  volatile enum TaskPoolStatus status;
 };
 
 struct TaskPool* pool_init(unsigned int pool_size);
@@ -68,5 +74,6 @@ struct AsyncTask* pool_schedule(struct TaskPool* p, Task* task, void* arg);
 void pool_wait(struct TaskPool* p);
 char* pool_dump_str(struct TaskPool* p);
 void pool_dump(struct TaskPool* p);
+char* pool_status(struct TaskPool* p);
 
 #endif

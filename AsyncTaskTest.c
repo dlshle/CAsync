@@ -4,7 +4,7 @@
 
 void* test(void* arg) {
 	printf("test function\n");
-	printf("addr: %s\n", (char*)(arg));
+	printf("arg: %s\n", (char*)(arg));
 }
 
 int main(int argc, char** argv) {
@@ -14,6 +14,8 @@ int main(int argc, char** argv) {
 	struct AsyncTask* t2 = pool_schedule(p, test, "c");
 	struct AsyncTask* t3 = pool_schedule(p, test, "4");
 	struct AsyncTask* t4 = pool_schedule(p, test, "e");
-	pool_wait(p);
+	printf("pool status: %s\n", pool_status(p));
+	// gotta wait before free
+	pool_free(p, 1);
 	return 0;
 }

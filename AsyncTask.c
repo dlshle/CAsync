@@ -1,7 +1,7 @@
 #include "ErrorHandler.h"
 #include "AsyncTask.h"
 #include <stdio.h>
-// #include <semaphore.h>
+#include <sys/syscall.h>
 
 // Lock
 void _acquire_pool_lock(pthread_mutex_t* lock) {
@@ -20,7 +20,7 @@ void _release_pool_lock(pthread_mutex_t* lock) {
 void* _async_task_procedure(void* task) {
   struct AsyncTask* t = (struct AsyncTask*)task;
   if (!t) return 0;
-	printf("running async procedure %p(%d)\n", t, t->id);
+	if (VERBOSE) printf("running async procedure %p(%d)\n", t, t->id);
   if (t->task != 0) {
     if (VERBOSE) printf("Async task %p(%d) running\n", t, t->id);
     t->state = RUNNING;
@@ -80,7 +80,7 @@ void* _worker_procedure(void* pool) {
   struct TaskPool* p = (struct TaskPool*)pool;
   void* job;
   int* sval;
-	if (VERBOSE) printf("worker report: worker is running\n");
+	if (VERBOSE) printf("worker report: worker is running on thread %d\n", (long int)syscall(224));
   do {
     if (Queue_size(p->q) == 0) {
 			if (VERBOSE) printf("worker report: Queue size is 0\n");
@@ -94,7 +94,7 @@ void* _worker_procedure(void* pool) {
     sem_wait(&(p->jobs_sem));
     // no need to acquire p lock as Queue has built-in lock
     job = Queue_poll(p->q);
-		if (VERBOSE) printf("worker report: job acquired.");
+		if (VERBOSE) printf("worker report: job acquired.\n");
     LOCK_POOL(p);
     p->state = P_BUSY;
     // sem_getvalue(&(p->waiting_sem), sval);
@@ -102,8 +102,8 @@ void* _worker_procedure(void* pool) {
 		// if (VERBOSE) printf("worker report: sem value: %d\n", *sval);
     UNLOCK_POOL(p);
     _async_task_procedure(job);
-		if (VERBOSE) printf("worker report: job done.");
-  } while (p->state != P_DONE);
+		if (VERBOSE) printf("worker report: job done.\n");
+  } while (p->status == P_RUNNING);
 }
 
 void _start_pool(struct TaskPool* p) {
@@ -139,16 +139,18 @@ struct TaskPool* pool_init(unsigned int pool_size) {
   p->q = Queue_new();
   p->state = P_NOT_STARTED;
 	_start_pool(p);
+	p->status = P_RUNNING;
   return p;
 }
 
 void pool_free(struct TaskPool* p, int wait) {
   if (!p) return ;
-  if (wait == 1) {
-    pool_wait(p);
-  }
+	LOCK_POOL(p);
+	p->status = P_STOP;
+	p->state = P_DONE;
+	UNLOCK_POOL(p);
   for (int i = 0; i < p->num_workers; i++) {
-    _free_async_task(p->workers[i], 1);
+    _free_async_task(p->workers[i], wait);
   }
   free(p->workers);
   Queue_free(p->q);
@@ -168,7 +170,9 @@ void pool_wait(struct TaskPool* p) {
   if (p->state == P_BUSY) {
 		LOCK_POOL(p);
 		p->state = P_DONE;
+    if (VERBOSE) printf("pool_wait state is DONE\n");
 		UNLOCK_POOL(p);
+    if (VERBOSE) printf("pool_wait will join working threads\n");
 		for (int i = 0; i < p->num_workers; i++) {
 			pthread_join((p->workers)[i]->thread, NULL);
 		}
@@ -182,4 +186,19 @@ char* pool_dump_str(struct TaskPool* p) {
 
 void pool_dump(struct TaskPool* p) {
   return ;
+}
+
+char* _pool_state_arr[] = {
+  "NOT_STARTED",
+  "IDLE",
+  "BUSY",
+  "DONE"
+};
+
+char* pool_state(struct TaskPool* p) {
+  return _pool_state_arr[p->state];
+}
+
+char* pool_status(struct TaskPool* p) {
+	return p->status == P_RUNNING?"RUNNING":"STOPPED";
 }
