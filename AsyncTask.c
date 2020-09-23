@@ -1,7 +1,7 @@
 #include "ErrorHandler.h"
 #include "AsyncTask.h"
 #include <stdio.h>
-#include <semaphore.h>
+// #include <semaphore.h>
 
 // Lock
 void _acquire_pool_lock(pthread_mutex_t* lock) {
@@ -91,7 +91,7 @@ void* _worker_procedure(void* pool) {
       // if (*sval == 0) sem_post(&(p->waiting_sem));
       UNLOCK_POOL(p);
     }
-    // sem_wait(&(p->jobs_sem));
+    sem_wait(&(p->jobs_sem));
     // no need to acquire p lock as Queue has built-in lock
     job = Queue_poll(p->q);
 		if (VERBOSE) printf("worker report: job acquired.");
