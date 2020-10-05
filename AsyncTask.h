@@ -7,7 +7,7 @@
 #include "./LinkedList/Queue.h"
 
 #define MAX_POOL_SIZE 1024
-#define VERBOSE 0
+#define VERBOSE 1
 
 enum AsyncTaskState {
 	NOT_STARTED = 0,

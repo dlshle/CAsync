@@ -80,21 +80,29 @@ void* _worker_procedure(void* pool) {
   struct TaskPool* p = (struct TaskPool*)pool;
   void* job;
   int* sval;
-	if (VERBOSE) printf("worker report: worker is running on thread %d\n", (long int)syscall(224));
+  long int thread_id = (long int)syscall(224);
+	if (VERBOSE) printf("worker report: worker is running on thread %d.\n", thread_id);
   do {
+    if (VERBOSE) printf("worker report(%d): pool is running.\n", thread_id);
     if (Queue_size(p->q) == 0) {
-			if (VERBOSE) printf("worker report: Queue size is 0\n");
+			if (VERBOSE) printf("worker report(%d): Queue size is 0.\n", thread_id);
       LOCK_POOL(p);
       p->state = P_IDLE;
       // sem_getvalue(&(p->waiting_sem), sval);
 			// if (VERBOSE) printf("worker report: pool state is IDLE, sem value: %d\n", *sval);
       // if (*sval == 0) sem_post(&(p->waiting_sem));
       UNLOCK_POOL(p);
+			if (VERBOSE) printf("worker report(%d): Queue size is 0(UNLOCKED).\n", thread_id);
     }
     sem_wait(&(p->jobs_sem));
+    if (VERBOSE) printf("worker report(%d): done waiting.\n", thread_id);
+    if (!(p->status == P_RUNNING)) {
+        if (VERBOSE) printf("worker report(%d): Poll not running, break.\n", thread_id);
+        break ;
+    }
     // no need to acquire p lock as Queue has built-in lock
     job = Queue_poll(p->q);
-		if (VERBOSE) printf("worker report: job acquired.\n");
+		if (VERBOSE) printf("worker report(%d): job acquired.\n", thread_id);
     LOCK_POOL(p);
     p->state = P_BUSY;
     // sem_getvalue(&(p->waiting_sem), sval);
@@ -102,7 +110,7 @@ void* _worker_procedure(void* pool) {
 		// if (VERBOSE) printf("worker report: sem value: %d\n", *sval);
     UNLOCK_POOL(p);
     _async_task_procedure(job);
-		if (VERBOSE) printf("worker report: job done.\n");
+		if (VERBOSE) printf("worker report(%d): job done.\n", thread_id);
   } while (p->status == P_RUNNING);
 }
 
@@ -118,6 +126,8 @@ void _start_pool(struct TaskPool* p) {
 }
 
 struct TaskPool* pool_init(unsigned int pool_size) {
+  if (VERBOSE) printf("pool_init start...\n");
+  if (VERBOSE) printf("==========================================\n\n");
   if (pool_size > MAX_POOL_SIZE) {
     pool_size = MAX_POOL_SIZE;
   }
@@ -140,6 +150,7 @@ struct TaskPool* pool_init(unsigned int pool_size) {
   p->state = P_NOT_STARTED;
 	_start_pool(p);
 	p->status = P_RUNNING;
+  if (VERBOSE) printf("==========================================\n\n");
   return p;
 }
 
@@ -167,8 +178,13 @@ struct AsyncTask* pool_schedule(struct TaskPool* p, Task* task, void* arg) {
 }
 
 void pool_wait(struct TaskPool* p) {
+  if (VERBOSE) printf("=================pool_wait=================\n");
   if (p->state == P_BUSY) {
+    if (VERBOSE) printf("pool_wait state is BUSY\n");
 		LOCK_POOL(p);
+    for (int i = 0; i < p->num_workers; i++) {
+        sem_post(&(p->jobs_sem));
+    }
 		p->state = P_DONE;
     if (VERBOSE) printf("pool_wait state is DONE\n");
 		UNLOCK_POOL(p);
@@ -176,7 +192,10 @@ void pool_wait(struct TaskPool* p) {
 		for (int i = 0; i < p->num_workers; i++) {
 			pthread_join((p->workers)[i]->thread, NULL);
 		}
+    if (VERBOSE) printf("pool_wait join done\n");
   }
+  if (VERBOSE) printf("pool_wait done\n");
+  if (VERBOSE) printf("=================pool_wait=================\n");
   return ;
 }
 

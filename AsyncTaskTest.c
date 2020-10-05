@@ -15,7 +15,9 @@ int main(int argc, char** argv) {
 	struct AsyncTask* t3 = pool_schedule(p, test, "4");
 	struct AsyncTask* t4 = pool_schedule(p, test, "e");
 	printf("pool status: %s\n", pool_status(p));
+  pool_wait(p);
+  printf("after wait?\n");
 	// gotta wait before free
-	pool_free(p, 1);
+	// pool_free(p, 1);
 	return 0;
 }
